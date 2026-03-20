@@ -2,53 +2,134 @@
 {% block content %}
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-  <h2 class="mb-0">📊 Data Table — {{ tracker_file }}</h2>
+  <h2 class="mb-0">Data Table — {{ tracker_file }}</h2>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="/add-event" class="btn btn-primary">➕ Add Event</a>
-
-    <!-- Delete Last Event Button -->
+    <a href="/add-event" class="btn btn-primary">Add Event</a>
     <button class="btn btn-outline-danger"
       data-bs-toggle="modal" data-bs-target="#deleteEventModal">
-      🗑 Delete Last Event
+      Delete Event
     </button>
   </div>
 </div>
 
-<div class="table-responsive">
+<div class="table-responsive table-scroll-wrapper">
   {{ table_html | safe }}
 </div>
 
 <div class="mt-3 small text-muted">
   <strong>Note:</strong> Row 1 = event classifications, Row 2 = event dates. Data starts from Row 3.
-  Click <strong>Edit</strong> on a member row to change their classification or family.
+  Click a <strong>member row</strong> to edit, add manual hours, or delete.
+  Use <a href="/edit-members"><strong>Edit Members</strong></a> for bulk edits.
 </div>
 
-<!-- Edit member links are added via the table — see note below -->
-<p class="mt-2 small text-muted">
-  To edit a member, go to
-  <strong>/edit-member/&lt;row_number&gt;</strong> where row number starts at 0.
-</p>
-
-<!-- Delete Last Event Modal -->
+<!-- Delete Event Modal -->
 <div class="modal fade" id="deleteEventModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title">⚠️ Delete Last Event?</h5>
+        <h5 class="modal-title">Delete an Event</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">
-        <p>This will permanently remove the <strong>most recently added event column</strong> from the tracker and save.</p>
-        <p class="text-danger mb-0">This action cannot be undone.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <form method="POST" action="/delete-last-event">
-          <button type="submit" class="btn btn-danger">Delete Last Event</button>
-        </form>
-      </div>
+      <form method="POST" action="/delete-event">
+        <div class="modal-body">
+          {% if events %}
+          <p>Select the event to permanently delete:</p>
+          <select name="event_index" class="form-select" required>
+            {% for idx, name, etype, edate in events %}
+            <option value="{{ idx }}">{{ name }} ({{ etype }}, {{ edate }})</option>
+            {% endfor %}
+          </select>
+          <p class="text-danger mt-3 mb-0">This action cannot be undone.</p>
+          {% else %}
+          <p class="text-muted">No events to delete.</p>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          {% if events %}
+          <button type="submit" class="btn btn-danger">Delete Event</button>
+          {% endif %}
+        </div>
+      </form>
     </div>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var table = document.querySelector('table');
+  if (!table) return;
+
+  var rows = table.querySelectorAll('tbody tr');
+
+  // --- Clickable member rows (skip first 2 metadata rows) ---
+  rows.forEach(function (row, index) {
+    if (index < 2) return;
+    var memberRow = index - 2;
+    row.style.cursor = 'pointer';
+    row.title = 'Click to edit this member';
+    row.addEventListener('click', function () {
+      window.location.href = '/edit-member/' + memberRow;
+    });
+  });
+
+  // --- Sortable columns (non-event columns: first 10) ---
+  var headers = table.querySelectorAll('thead th');
+  var sortableCount = Math.min(headers.length, 10);
+  var sortState = {};  // col index -> 'asc' | 'desc'
+
+  for (var i = 0; i < sortableCount; i++) {
+    (function (colIdx) {
+      var th = headers[colIdx];
+      th.style.cursor = 'pointer';
+      th.style.userSelect = 'none';
+      th.title = 'Click to sort';
+      th.innerHTML = th.textContent + ' <span class="sort-arrow" style="opacity:0.4">&#x21C5;</span>';
+
+      th.addEventListener('click', function () {
+        var dir = sortState[colIdx] === 'asc' ? 'desc' : 'asc';
+        sortState = {};
+        sortState[colIdx] = dir;
+
+        // Reset all arrows
+        for (var j = 0; j < sortableCount; j++) {
+          var arrow = headers[j].querySelector('.sort-arrow');
+          if (arrow) {
+            arrow.innerHTML = '&#x21C5;';
+            arrow.style.opacity = '0.4';
+          }
+        }
+        var activeArrow = th.querySelector('.sort-arrow');
+        activeArrow.innerHTML = dir === 'asc' ? '&#x25B2;' : '&#x25BC;';
+        activeArrow.style.opacity = '1';
+
+        // Get only member rows (skip metadata rows 0 and 1)
+        var allRows = Array.from(table.querySelectorAll('tbody tr'));
+        var metaRows = allRows.slice(0, 2);
+        var dataRows = allRows.slice(2);
+
+        dataRows.sort(function (a, b) {
+          var aVal = a.cells[colIdx] ? a.cells[colIdx].textContent.trim() : '';
+          var bVal = b.cells[colIdx] ? b.cells[colIdx].textContent.trim() : '';
+          var aNum = parseFloat(aVal);
+          var bNum = parseFloat(bVal);
+          var cmp;
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            cmp = aNum - bNum;
+          } else {
+            cmp = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+          }
+          return dir === 'asc' ? cmp : -cmp;
+        });
+
+        var tbody = table.querySelector('tbody');
+        // Re-append: metadata first, then sorted data rows
+        metaRows.forEach(function (r) { tbody.appendChild(r); });
+        dataRows.forEach(function (r) { tbody.appendChild(r); });
+      });
+    })(i);
+  }
+});
+</script>
 
 {% endblock %}

@@ -1,0 +1,27 @@
+{
+  "classifications": [
+    "Officer",
+    "Junior Officer",
+    "Big Sib",
+    "Member"
+  ],
+  "families": [
+    "Kuromi",
+    "PomPom",
+    "Melody",
+    "NoFam"
+  ],
+  "event_types": [
+    "General Meeting",
+    "Officer Meeting",
+    "Tabling",
+    "Volunteer",
+    "Social",
+    "Retreat"
+  ],
+  "leaderboard_event_types": [
+    "General Meeting",
+    "Volunteer",
+    "Social"
+  ]
+}

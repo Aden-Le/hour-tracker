@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Settings</h2>
+<p class="text-muted">Add or remove options for classifications, families, and event types. These changes apply to all tracker files.</p>
+
+<div class="row g-4">
+
+  {% set sections = [
+    ("classifications", "Classifications", "e.g. Officer, Member"),
+    ("families", "Families", "e.g. Kuromi, PomPom"),
+    ("event_types", "Event Types", "e.g. Volunteer, Social"),
+    ("leaderboard_event_types", "Leaderboard Event Types", "Events counted toward family leaderboard")
+  ] %}
+
+  {% for key, label, hint in sections %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white fw-bold">{{ label }}</div>
+      <div class="card-body">
+        <p class="text-muted small mb-2">{{ hint }}</p>
+
+        <!-- Current items -->
+        <div class="mb-3">
+          {% for item in config[key] %}
+          <span class="badge bg-secondary me-1 mb-1 fs-6 fw-normal">
+            {{ item }}
+            <form method="POST" action="/settings" class="d-inline">
+              <input type="hidden" name="section" value="{{ key }}">
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="value" value="{{ item }}">
+              <button type="submit" class="btn-close btn-close-white ms-1" style="font-size: 0.5em;" title="Remove"></button>
+            </form>
+          </span>
+          {% endfor %}
+          {% if not config[key] %}
+          <span class="text-muted fst-italic">None configured</span>
+          {% endif %}
+        </div>
+
+        <!-- Add new -->
+        <form method="POST" action="/settings" class="input-group input-group-sm">
+          <input type="hidden" name="section" value="{{ key }}">
+          <input type="hidden" name="action" value="add">
+          <input type="text" name="value" class="form-control" placeholder="Add new..." required>
+          <button type="submit" class="btn btn-outline-success">Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<div class="mt-4">
+  <a href="/edit-members" class="btn btn-outline-primary">Back to Edit Members</a>
+</div>
+
+{% endblock %}

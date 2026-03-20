@@ -17,7 +17,13 @@
           <dt class="col-sm-4">Date</dt>
           <dd class="col-sm-8">{{ pending.date }}</dd>
           <dt class="col-sm-4">Duration</dt>
-          <dd class="col-sm-8">{{ pending.duration }} hour(s)</dd>
+          <dd class="col-sm-8">
+            {% if specific_hours %}
+              <span class="badge bg-info">Specific hours per member</span>
+            {% else %}
+              {{ pending.duration }} hour(s)
+            {% endif %}
+          </dd>
         </dl>
       </div>
     </div>
@@ -68,23 +74,98 @@
 
     </div>
 
+    {% if specific_hours %}
+    <!-- Per-Member Hours Input -->
+    <div class="card mb-4 border-info">
+      <div class="card-header bg-info text-white fw-bold">Set Hours for Each Member</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Enter the number of hours each member earned for this event.</p>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th style="width: 150px;">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for name in all_attendees %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ name }}</td>
+                <td>
+                  <input type="number" name="member_hours_{{ loop.index0 }}" class="form-control form-control-sm member-hours-input"
+                    step="0.5" min="0" placeholder="0" required>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-2">
+          <label class="form-label small fw-semibold">Set all to:</label>
+          <div class="input-group input-group-sm" style="max-width: 250px;">
+            <input type="number" id="bulkHoursInput" class="form-control" step="0.5" min="0" placeholder="e.g. 1.5">
+            <button type="button" class="btn btn-outline-secondary" id="bulkSetBtn">Apply to All</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     {% if not matched and not new_people %}
     <div class="alert alert-warning">
-      ⚠️ No names were found to process. Go back and check your pasted names.
+      No names were found to process. Go back and check your pasted names.
     </div>
     {% endif %}
 
     <!-- Action Buttons -->
-    <div class="d-flex gap-2">
-      <form method="POST" action="/add-event/confirm">
+    <form method="POST" action="/add-event/confirm">
+      {% if specific_hours %}
+      <!-- Mirror the per-member hours into this form via JS -->
+      <div id="hiddenHoursContainer"></div>
+      {% endif %}
+      <div class="d-flex gap-2">
         <button type="submit" class="btn btn-success btn-lg"
           {% if not matched and not new_people %}disabled{% endif %}>
-          💾 Confirm & Save
+          Confirm & Save
         </button>
-      </form>
-      <a href="/add-event" class="btn btn-outline-secondary btn-lg">← Go Back</a>
-      <a href="/tracker" class="btn btn-outline-danger btn-lg">Cancel</a>
-    </div>
+        <a href="/add-event" class="btn btn-outline-secondary btn-lg">Go Back</a>
+        <a href="/tracker" class="btn btn-outline-danger btn-lg">Cancel</a>
+      </div>
+    </form>
+
+    {% if specific_hours %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // Bulk set hours
+      var bulkBtn = document.getElementById('bulkSetBtn');
+      var bulkInput = document.getElementById('bulkHoursInput');
+      bulkBtn.addEventListener('click', function () {
+        var val = bulkInput.value;
+        if (val === '') return;
+        document.querySelectorAll('.member-hours-input').forEach(function (input) {
+          input.value = val;
+        });
+      });
+
+      // On form submit, copy per-member hours into the submit form as hidden inputs
+      var submitForm = document.querySelector('form[action="/add-event/confirm"]');
+      submitForm.addEventListener('submit', function (e) {
+        var container = document.getElementById('hiddenHoursContainer');
+        container.innerHTML = '';
+        document.querySelectorAll('.member-hours-input').forEach(function (input) {
+          var hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = input.name;
+          hidden.value = input.value;
+          container.appendChild(hidden);
+        });
+      });
+    });
+    </script>
+    {% endif %}
 
   </div>
 </div>

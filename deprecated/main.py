@@ -193,6 +193,14 @@ def add_names(student_data, event_data, new_first, new_last):
         # Create a set of (first_name, last_name) tuples for faster lookup
         new_students = set(zip(new_first, new_last))
 
+        # Determine final event name BEFORE assigning to students
+        original_name = event_name
+        unique = 0
+        for event in event_data:
+            if event.name == event_name:
+                unique += 1
+                event_name = original_name + "." + str(unique)
+
         # Iterate through student_data to find matches
         matched_students = set()  # Track matched (first_name, last_name) pairs
         for student in student_data:
@@ -215,29 +223,21 @@ def add_names(student_data, event_data, new_first, new_last):
         print("Your going to add these new names to the list")
         for index in range(len(new_first)):
             print(f"{new_first[index]} {new_last[index]}")
-        
+
         spacer()
         confirm = input("Enter Y to confirm or N to Exit: ")
         if confirm.lower() == "y":
             #---------------------------------------------------------------
-            # Add zeros to previous events for new members and make sure to make event names unique
-            original_name = event_name
+            # Add zeros to previous events for new members
             blanks = []
             for _ in range(len(new_first)):
                 blanks.append(0)
 
-            unique = 0
             for event in event_data:
                 event.attendance.extend(blanks)
-                if event.name == event_name:
-                    unique += 1
-                    print(unique)
-                    event_name = (original_name + "." + str(unique))
-                    
-
 
             #---------------------------------------------------------------
-            # Addition of New names & Event  
+            # Addition of New names & Event
             number = len(student_data) - 1
 
             for index in range(len(new_first)):
@@ -265,17 +265,31 @@ def add_names(student_data, event_data, new_first, new_last):
             main()
         #---------------------------------------------------------------
 
-def apply_event(student_data, event_data, event_name, event_type, event_date, event_time, new_first, new_last):
+def apply_event(student_data, event_data, event_name, event_type, event_date, event_time, new_first, new_last, member_hours=None):
     """
     Pure (no input() calls) version of the add-event logic for use by the web UI.
     Matches existing students, adds new ones, appends the event, and returns updated lists.
     Returns (student_data, event_data) or raises ValueError on duplicate names.
+
+    member_hours: optional dict mapping (first, last) -> hours string for per-member hours.
+                  When provided, each attendee gets their specific hours instead of event_time.
     """
     pairs_input = list(zip(new_first, new_last))
     if len(pairs_input) != len(set(pairs_input)):
         raise ValueError("Duplicate names detected in attendee list.")
 
     new_students_set = set(zip(new_first, new_last))
+
+    # Determine final event name BEFORE assigning to students
+    # (pandas will auto-suffix duplicate column names on read, so we match that here)
+    original_name = event_name
+    unique = 0
+    for event in event_data:
+        if event.name == event_name:
+            unique += 1
+            event_name = original_name + "." + str(unique)
+
+    # Now assign the correct (possibly renamed) event name to matched students
     matched_students = set()
     for student in student_data:
         student_name = (student.first_name, student.last_name)
@@ -291,14 +305,9 @@ def apply_event(student_data, event_data, event_name, event_type, event_date, ev
     new_last  = [p[1] for p in pairs]
 
     # Extend attendance for existing events with zeros for new members
-    original_name = event_name
     blanks = [0] * len(new_first)
-    unique = 0
     for event in event_data:
         event.attendance.extend(blanks)
-        if event.name == event_name:
-            unique += 1
-            event_name = original_name + "." + str(unique)
 
     number = len(student_data) - 1
     for index in range(len(new_first)):
@@ -308,7 +317,11 @@ def apply_event(student_data, event_data, event_name, event_type, event_date, ev
     event_attendance = []
     for student in student_data:
         if event_name in student.event_list:
-            event_attendance.append(event_time)
+            if member_hours:
+                key = (student.first_name, student.last_name)
+                event_attendance.append(member_hours.get(key, "0"))
+            else:
+                event_attendance.append(event_time)
         else:
             event_attendance.append("0")
 
@@ -443,40 +456,54 @@ def classification_getter():
 
     return(classification_list, family_list, event_list)
 
+def _extract_base_event_name(event_name):
+    """Extract the base event name, stripping date suffix or old .N suffix."""
+    # Handle new format: "Event Name (03/20/2026)"
+    if " (" in event_name and event_name.endswith(")"):
+        return event_name[:event_name.rfind(" (")]
+    # Handle old format: "Event Name.1"
+    if "." in event_name:
+        parts = event_name.rsplit(".", 1)
+        if parts[1].isdigit():
+            return parts[0]
+    return event_name
+
+
 def banquet_qual(student_data, event_data):
     #---------------------------------------------------------------
     # Checks to see if members can attend banquet
     banquet_attendance_valid = []
 
     #---------------------------------------------------------------
-    # Isolate General Meeting and Volunteer Events Only
-    event_class_dict = defaultdict()
+    # Build dict: event_name -> (base_name, classification) for GM and Volunteer events
+    event_info = {}
     for event in event_data:
-        if event.classification in ["General Meeting", "Volunteer"] and "." not in event.name:
-            event_class_dict[event.name] = event.classification
+        if event.classification in ["General Meeting", "Volunteer"]:
+            base_name = _extract_base_event_name(event.name)
+            event_info[event.name] = (base_name, event.classification)
 
     #---------------------------------------------------------------
-    # Checks how many unique volunteer events and general meeting a member has attended
+    # Checks how many unique volunteer events and general meetings a member has attended
     for student in student_data:
-        volunteer = 0
-        general_meeting = 0
-        student_event_set = set(student.event_list)
-        for event in student_event_set:
-            if event in event_class_dict.keys():
-                if event_class_dict[event] == "General Meeting":
-                    general_meeting += 1
-                elif event_class_dict[event] == "Volunteer":
-                    volunteer += 1
-        
+        volunteer_names = set()
+        general_meeting_names = set()
+        for event_name in student.event_list:
+            if event_name in event_info:
+                base_name, classification = event_info[event_name]
+                if classification == "General Meeting":
+                    general_meeting_names.add(base_name)
+                elif classification == "Volunteer":
+                    volunteer_names.add(base_name)
+
         #---------------------------------------------------------------
         # Adds to the validation list to be added to the main Data frame
-        
-        if volunteer >= 2 and general_meeting >= 1:
+
+        if len(volunteer_names) >= 2 and len(general_meeting_names) >= 1:
             banquet_attendance_valid.append("Yes")
 
         else:
             banquet_attendance_valid.append("No")
-            
+
     return banquet_attendance_valid
 
 def hour_counter(member_class, valid_family, event_class, student_data, event_data):
@@ -509,7 +536,23 @@ def hour_counter(member_class, valid_family, event_class, student_data, event_da
     
     return member_time
 
+def parse_date_for_sort(date_str):
+    """Parse a date string for sorting. Supports MM/DD/YYYY and YYYY-MM-DD formats."""
+    from datetime import datetime
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m/%d/%y'):
+        try:
+            return datetime.strptime(date_str.strip(), fmt)
+        except ValueError:
+            continue
+    # If unparseable, sort to the end
+    return datetime.max
+
+
 def saver(student_data, event_data, savefile):
+    #---------------------------------------------------------------
+    # Sort events by date before saving
+    event_data.sort(key=lambda e: parse_date_for_sort(e.date))
+
     #---------------------------------------------------------------
     # First Column (First Name)
     first_col = ["",""]
