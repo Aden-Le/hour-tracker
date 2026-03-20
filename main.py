@@ -309,10 +309,9 @@ def classification_getter():
     while switch == True:
         print("------------------------------------------------------------")
         print("Which family do you want to check the hours for?")
-        print("Brown Family (Q)")
-        print("Sally Family (W)")
-        print("Moon Family (E)")
-        print("Boss Family (R)")
+        print("Kuromi Family (Q)")
+        print("PomPom Family (W)")
+        print("Melody Family (E)")
         print("No Family (T)")
         print("All (A)")
         print("Done (S)")
@@ -326,17 +325,15 @@ def classification_getter():
 
         #---------------------------------------------------------------
         if choice.lower() == "q":
-            family_list.append("Brown")
+            family_list.append("Kuromi")
         elif choice.lower() == "w":
-            family_list.append("Sally")
+            family_list.append("PomPom")
         elif choice.lower() == "e":
-            family_list.append("Moon")
-        elif choice.lower() == "r":
-            family_list.append("Boss")
+            family_list.append("Melody")
         elif choice.lower() == "t":
             family_list.append("NoFam")
         elif choice.lower() == "a":
-            family_list = ["Brown", "Sally", "Moon", "Boss", "NoFam"]
+            family_list = ["Kuromi", "PomPom", "Melody", "NoFam"]
             switch = False
         elif choice.lower() == "s":
             switch = False
@@ -494,7 +491,7 @@ def saver(student_data, event_data, savefile):
     # Fifth Column (Total)
     fifth_col = ["",""]
     total_hours = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown", "Sally", "Moon", "Boss", "NoFam"], 
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi", "PomPom", "Melody", "NoFam"], 
         ["General Meeting", "Officer Meeting", "Tabling", "Volunteer", "Social", "Retreat"], 
         student_data, event_data
     )
@@ -506,7 +503,7 @@ def saver(student_data, event_data, savefile):
     # Sixth Column (Volunteer)
     sixth_col = ["",""]
     volunteer_hours = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown", "Sally", "Moon", "Boss", "NoFam"], 
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi", "PomPom", "Melody", "NoFam"],
         ["Volunteer"], 
         student_data, event_data
     )
@@ -517,7 +514,7 @@ def saver(student_data, event_data, savefile):
     # Seventh Column (General Meeting)
     seventh_col = ["",""]
     general_hours = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown", "Sally", "Moon", "Boss", "NoFam"], 
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi", "PomPom", "Melody", "NoFam"],
         ["General Meeting"], 
         student_data, event_data
     )
@@ -528,7 +525,7 @@ def saver(student_data, event_data, savefile):
     # Eighth Column (Tabling)
     eighth_col = ["",""]
     tabling_hours = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown", "Sally", "Moon", "Boss", "NoFam"], 
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi", "PomPom", "Melody", "NoFam"],
         ["Tabling"], 
         student_data, event_data
     )
@@ -539,7 +536,7 @@ def saver(student_data, event_data, savefile):
     # Ninth Column (Social)
     ninth_col = ["",""]
     social_hours = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown", "Sally", "Moon", "Boss", "NoFam"], 
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi", "PomPom", "Melody", "NoFam"],
         ["Social"], 
         student_data, event_data
     )
@@ -602,21 +599,17 @@ def family_leaderboard(student_data, event_data):
     
     families = defaultdict()
 
-    brown_family = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Brown"], event_list, student_data, event_data)
-    families["Brown Family"] = sum(brown_family.values())
+    kuromi_family = hour_counter(
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Kuromi"], event_list, student_data, event_data)
+    families["Kuromi Family"] = sum(kuromi_family.values())
 
-    boss_family = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Boss"], event_list, student_data, event_data)
-    families["Boss Family"] = sum(boss_family.values())
+    pompom_family = hour_counter(
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["PomPom"], event_list, student_data, event_data)
+    families["PomPom Family"] = sum(pompom_family.values())
 
-    moon_family = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Moon"], event_list, student_data, event_data)
-    families["Moon Family"] = sum(moon_family.values())
-
-    sally_family = hour_counter(
-        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Sally"], event_list, student_data, event_data)
-    families["Sally Family"] = sum(sally_family.values())
+    melody_family = hour_counter(
+        ["Officer", "Junior Officer", "Big Sib", "Member"], ["Melody"], event_list, student_data, event_data)
+    families["Melody Family"] = sum(melody_family.values())
 
     return families
 
@@ -636,7 +629,7 @@ def main():
     print(len(new_last_names))
     #---------------------------------------------------------------
     # Import the event and student data from the pre-existing data tracker
-    event_data, student_data = process_main_tracker('new.csv')
+    event_data, student_data = process_main_tracker('2025_2026_Main_Tracker.csv')
     #---------------------------------------------------------------
     # Create Dashboard
     spacer()
@@ -654,7 +647,7 @@ def main():
     
     if decision.lower() == "q":
         spacer()
-        print(pd.read_csv('new.csv'))
+        print(pd.read_csv('2025_2026_Main_Tracker.csv'))
         spacer()
         print("Press Enter When Done Viewing")
         input()
@@ -664,7 +657,7 @@ def main():
 
     if decision.lower() == "w":
         student_data, event_data = add_names(student_data, event_data, new_first_names, new_last_names)
-        saver(student_data, event_data, 'new.csv')
+        saver(student_data, event_data, '2025_2026_Main_Tracker.csv')
         pageclear()
         print("Save Occured")
         main()
@@ -702,12 +695,11 @@ def main():
 
     if decision.lower() == "r":
         pageclear()
-        family_count = 4
         family_dict = family_leaderboard(student_data, event_data)
         sorted_family_times = dict(sorted(family_dict.items(), key=lambda item: item[1], reverse=True))
         family_list = list(sorted_family_times.items())
         pageclear()
-        for index in range(4):
+        for index in range(len(family_list)):
             print(f"{family_list[index][0]}: {family_list[index][1]}")
         spacer()
         print("Press Enter When Done Viewing")
@@ -716,7 +708,7 @@ def main():
         main()
     
     if decision.lower() == "s":
-        saver(student_data, event_data, 'new.csv')
+        saver(student_data, event_data, '2025_2026_Main_Tracker.csv')
         pageclear()
         print("Have a good day!")
 
