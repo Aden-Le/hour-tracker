@@ -1,6 +1,8 @@
 import os
 import io
+import json
 from collections import defaultdict
+from datetime import datetime
 from glob import glob
 
 import pandas as pd
@@ -9,16 +11,51 @@ from flask import (
     session, flash, send_file
 )
 
-from main import process_main_tracker, apply_event, hour_counter, saver, Student
+from deprecated.main import process_main_tracker, apply_event, hour_counter, saver, Student
 
 app = Flask(__name__)
 app.secret_key = 'tzu-chi-hour-tracker-secret'
 
 TEMPLATE_FILE = 'blank_template.csv'
-ALL_CLASSES = ["Officer", "Junior Officer", "Big Sib", "Member"]
-ALL_FAMILIES = ["Kuromi", "PomPom", "Melody", "NoFam"]
-ALL_EVENT_TYPES = ["General Meeting", "Officer Meeting", "Tabling", "Volunteer", "Social", "Retreat"]
-LEADERBOARD_EVENT_TYPES = ["General Meeting", "Volunteer", "Social"]
+CONFIG_FILE = 'config.json'
+
+DEFAULT_CONFIG = {
+    "classifications": ["Officer", "Junior Officer", "Big Sib", "Member"],
+    "families": ["Kuromi", "PomPom", "Melody", "NoFam"],
+    "event_types": ["General Meeting", "Officer Meeting", "Tabling", "Volunteer", "Social", "Retreat"],
+    "leaderboard_event_types": ["General Meeting", "Volunteer", "Social"],
+}
+
+
+def load_config():
+    """Load configuration from config.json, creating it with defaults if missing."""
+    if os.path.isfile(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    save_config(DEFAULT_CONFIG)
+    return dict(DEFAULT_CONFIG)
+
+
+def save_config(cfg):
+    """Write configuration to config.json."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(cfg, f, indent=2)
+
+
+def get_all_classes():
+    return load_config()["classifications"]
+
+
+def get_all_families():
+    return load_config()["families"]
+
+
+def get_all_event_types():
+    return load_config()["event_types"]
+
+
+def get_leaderboard_event_types():
+    return load_config()["leaderboard_event_types"]
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +105,9 @@ def safe_load_table_html(tracker_file):
     """Return a Bootstrap-styled HTML table string from the CSV, or an error message."""
     try:
         df = pd.read_csv(tracker_file, dtype=str).fillna('')
+        # Strip pandas duplicate suffixes (.1, .2, …) so display names stay clean
+        import re
+        df.columns = [re.sub(r'\.\d+$', '', col) for col in df.columns]
         html = df.to_html(
             classes='table table-sm table-striped table-hover table-bordered',
             border=0,
@@ -136,6 +176,66 @@ def rename_file():
     return redirect(url_for('index'))
 
 
+@app.route('/upload-file', methods=['POST'])
+def upload_file():
+    uploaded = request.files.get('file')
+    if not uploaded or uploaded.filename == '':
+        flash('No file selected.', 'danger')
+        return redirect(url_for('index'))
+    filename = uploaded.filename.strip()
+    if not filename.endswith('.csv'):
+        flash('Only CSV files are allowed.', 'danger')
+        return redirect(url_for('index'))
+    # Sanitise: keep only the basename to prevent path traversal
+    filename = os.path.basename(filename)
+    if os.path.isfile(filename):
+        flash(f'"{filename}" already exists. Rename it first or delete the existing file.', 'danger')
+        return redirect(url_for('index'))
+    # Validate CSV format before saving
+    try:
+        content = uploaded.read()
+        df = pd.read_csv(io.BytesIO(content), dtype=str, nrows=0)
+        expected = ['First Name', 'Last Name', 'Class', 'Family', 'Total Hours',
+                    'Volunteer Hours', 'General Meeting', 'Tabling', 'Social', 'Banquet']
+        actual = list(df.columns[:10])
+        if actual != expected:
+            flash(f'Invalid tracker format. Expected columns: {", ".join(expected)}. '
+                  f'Got: {", ".join(actual)}.', 'danger')
+            return redirect(url_for('index'))
+    except Exception as e:
+        flash(f'Could not read CSV file: {e}', 'danger')
+        return redirect(url_for('index'))
+
+    with open(filename, 'wb') as f:
+        f.write(content)
+    session['tracker_file'] = filename
+    flash(f'Uploaded and selected "{filename}".', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/download-file/<path:filename>')
+def download_file(filename):
+    filename = os.path.basename(filename)
+    if not os.path.isfile(filename):
+        flash(f'File "{filename}" not found.', 'danger')
+        return redirect(url_for('index'))
+    return send_file(filename, mimetype='text/csv',
+                     as_attachment=True, download_name=filename)
+
+
+@app.route('/delete-file', methods=['POST'])
+def delete_file():
+    filename = request.form.get('filename', '').strip()
+    if not filename or not os.path.isfile(filename):
+        flash(f'File "{filename}" not found.', 'danger')
+        return redirect(url_for('index'))
+    os.remove(filename)
+    if session.get('tracker_file') == filename:
+        session.pop('tracker_file', None)
+    flash(f'Deleted "{filename}".', 'success')
+    return redirect(url_for('index'))
+
+
 # ---------------------------------------------------------------------------
 # Tracker (Data Table)
 # ---------------------------------------------------------------------------
@@ -151,7 +251,9 @@ def tracker():
         session.pop('tracker_file', None)
         return redirect(url_for('index'))
     table_html = safe_load_table_html(tf)
-    return render_template('tracker.html', table_html=table_html, tracker_file=tf)
+    event_data, student_data = load_data(tf)
+    events = [(i, e.name, e.classification, e.date) for i, e in enumerate(event_data)]
+    return render_template('tracker.html', table_html=table_html, tracker_file=tf, events=events)
 
 
 # ---------------------------------------------------------------------------
@@ -166,25 +268,35 @@ def add_event():
         return redirect(url_for('index'))
 
     if request.method == 'GET':
-        return render_template('add_event.html', event_types=ALL_EVENT_TYPES)
+        return render_template('add_event.html', event_types=get_all_event_types())
 
     # POST — validate and store in session
     event_name = request.form.get('event_name', '').strip()
     event_duration = request.form.get('event_duration', '').strip()
-    event_date = request.form.get('event_date', '').strip()
+    event_date_raw = request.form.get('event_date', '').strip()
     event_type = request.form.get('event_type', '').strip()
+    specific_hours = bool(request.form.get('specific_hours'))
+
+    # Convert YYYY-MM-DD from date picker to MM/DD/YYYY for storage
+    event_date = event_date_raw
+    if event_date_raw:
+        try:
+            event_date = datetime.strptime(event_date_raw, '%Y-%m-%d').strftime('%m/%d/%Y')
+        except ValueError:
+            pass  # keep as-is if already in another format
 
     errors = []
     if not event_name:
         errors.append('Event name is required.')
     if not event_date:
         errors.append('Event date is required.')
-    if event_type not in ALL_EVENT_TYPES:
+    if event_type not in get_all_event_types():
         errors.append('Please select a valid event type.')
-    try:
-        float(event_duration)
-    except (ValueError, TypeError):
-        errors.append('Duration must be a number (e.g. 1, 1.5, 2).')
+    if not specific_hours:
+        try:
+            float(event_duration)
+        except (ValueError, TypeError):
+            errors.append('Duration must be a number (e.g. 1, 1.5, 2).')
 
     pasted = request.form.get('names_paste', '').strip()
     if not pasted:
@@ -194,17 +306,18 @@ def add_event():
         errors.append('Could not parse any names. Make sure you copied two columns (First Name, Last Name) from Excel.')
 
     if errors:
-        return render_template('add_event.html', event_types=ALL_EVENT_TYPES,
+        return render_template('add_event.html', event_types=get_all_event_types(),
                                errors=errors,
                                event_name=event_name, event_duration=event_duration,
-                               event_date=event_date, event_type=event_type,
-                               names_paste=pasted)
+                               event_date=event_date_raw, event_type=event_type,
+                               names_paste=pasted, specific_hours=specific_hours)
 
     session['pending_event'] = {
         'name': event_name,
         'duration': event_duration,
         'date': event_date,
         'type': event_type,
+        'specific_hours': specific_hours,
     }
     session['pending_first'] = first_names
     session['pending_last'] = last_names
@@ -227,23 +340,52 @@ def add_event_confirm():
 
     matched = [f"{f} {l}" for f, l in incoming_pairs if (f, l) in existing_pairs]
     new_people = [f"{f} {l}" for f, l in incoming_pairs if (f, l) not in existing_pairs]
+    all_attendees = [f"{f} {l}" for f, l in incoming_pairs]
+    specific_hours = pending.get('specific_hours', False)
 
     if request.method == 'GET':
         return render_template('add_event_confirm.html',
                                pending=pending,
                                matched=matched,
-                               new_people=new_people)
+                               new_people=new_people,
+                               specific_hours=specific_hours,
+                               all_attendees=all_attendees)
 
     # POST — execute apply_event + saver
     if len(incoming_pairs) != len(set(incoming_pairs)):
         flash('ERROR: Duplicate names detected in the attendee list. Remove duplicates and try again.', 'danger')
         return redirect(url_for('add_event'))
 
+    # Collect per-member hours if in specific_hours mode
+    member_hours = None
+    if specific_hours:
+        member_hours = {}
+        errors = []
+        for idx, (f, l) in enumerate(incoming_pairs):
+            val = request.form.get(f'member_hours_{idx}', '').strip()
+            try:
+                hrs = float(val)
+                if hrs < 0:
+                    errors.append(f'{f} {l}: hours cannot be negative.')
+                else:
+                    member_hours[(f, l)] = str(hrs)
+            except (ValueError, TypeError):
+                errors.append(f'{f} {l}: invalid hours value "{val}".')
+        if errors:
+            flash('Please fix hour values: ' + '; '.join(errors), 'danger')
+            return render_template('add_event_confirm.html',
+                                   pending=pending,
+                                   matched=matched,
+                                   new_people=new_people,
+                                   specific_hours=specific_hours,
+                                   all_attendees=all_attendees)
+
     try:
         new_student_data, new_event_data = apply_event(
             student_data, event_data,
             pending['name'], pending['type'], pending['date'], pending['duration'],
-            list(first_names), list(last_names)
+            list(first_names), list(last_names),
+            member_hours=member_hours
         )
     except ValueError as e:
         flash(f'ERROR: {e}', 'danger')
@@ -269,15 +411,15 @@ def hours():
         return redirect(url_for('index'))
 
     results = None
-    selected_classes = ALL_CLASSES[:]
-    selected_families = ALL_FAMILIES[:]
-    selected_events = ALL_EVENT_TYPES[:]
+    selected_classes = get_all_classes()[:]
+    selected_families = get_all_families()[:]
+    selected_events = get_all_event_types()[:]
     top_n = 0
 
     if request.method == 'POST':
-        selected_classes = request.form.getlist('classification') or ALL_CLASSES[:]
-        selected_families = request.form.getlist('family') or ALL_FAMILIES[:]
-        selected_events = request.form.getlist('event_type') or ALL_EVENT_TYPES[:]
+        selected_classes = request.form.getlist('classification') or get_all_classes()[:]
+        selected_families = request.form.getlist('family') or get_all_families()[:]
+        selected_events = request.form.getlist('event_type') or get_all_event_types()[:]
         try:
             top_n = int(request.form.get('top_n', 0))
         except ValueError:
@@ -292,9 +434,9 @@ def hours():
         results = sorted_times
 
     return render_template('hour_counter.html',
-                           all_classes=ALL_CLASSES,
-                           all_families=ALL_FAMILIES,
-                           all_event_types=ALL_EVENT_TYPES,
+                           all_classes=get_all_classes(),
+                           all_families=get_all_families(),
+                           all_event_types=get_all_event_types(),
                            selected_classes=selected_classes,
                            selected_families=selected_families,
                            selected_events=selected_events,
@@ -309,9 +451,9 @@ def hours_export():
         flash('Please select a tracker file first.', 'warning')
         return redirect(url_for('index'))
 
-    selected_classes = request.form.getlist('classification') or ALL_CLASSES[:]
-    selected_families = request.form.getlist('family') or ALL_FAMILIES[:]
-    selected_events = request.form.getlist('event_type') or ALL_EVENT_TYPES[:]
+    selected_classes = request.form.getlist('classification') or get_all_classes()[:]
+    selected_families = request.form.getlist('family') or get_all_families()[:]
+    selected_events = request.form.getlist('event_type') or get_all_event_types()[:]
     try:
         top_n = int(request.form.get('top_n', 0))
     except ValueError:
@@ -344,29 +486,149 @@ def leaderboard():
         return redirect(url_for('index'))
 
     results = None
-    selected_events = LEADERBOARD_EVENT_TYPES[:]
+    selected_events = get_leaderboard_event_types()[:]
 
     if request.method == 'POST':
-        selected_events = request.form.getlist('event_type') or LEADERBOARD_EVENT_TYPES[:]
+        selected_events = request.form.getlist('event_type') or get_leaderboard_event_types()[:]
         event_data, student_data = load_data(tf)
 
         families = {}
-        for family_name, family_key in [('Kuromi Family', 'Kuromi'),
-                                         ('PomPom Family', 'PomPom'),
-                                         ('Melody Family', 'Melody')]:
-            times = hour_counter(ALL_CLASSES, [family_key], selected_events, student_data, event_data)
-            families[family_name] = round(sum(times.values()), 2)
+        for fam in get_all_families():
+            if fam == 'NoFam':
+                continue
+            times = hour_counter(get_all_classes(), [fam], selected_events, student_data, event_data)
+            families[f'{fam} Family'] = round(sum(times.values()), 2)
 
         results = sorted(families.items(), key=lambda x: x[1], reverse=True)
 
     return render_template('leaderboard.html',
-                           leaderboard_event_types=LEADERBOARD_EVENT_TYPES,
+                           leaderboard_event_types=get_leaderboard_event_types(),
                            selected_events=selected_events,
                            results=results)
 
 
 # ---------------------------------------------------------------------------
-# Edit Member
+# Edit Members (bulk table)
+# ---------------------------------------------------------------------------
+
+@app.route('/edit-members', methods=['GET', 'POST'])
+def edit_members():
+    tf = get_tracker_file()
+    if not tf:
+        flash('Please select a tracker file first.', 'warning')
+        return redirect(url_for('index'))
+
+    event_data, student_data = load_data(tf)
+
+    if request.method == 'GET':
+        return render_template('edit_members.html',
+                               students=student_data,
+                               all_classes=get_all_classes(),
+                               all_families=get_all_families())
+
+    # POST — bulk update all members
+    changed = 0
+    for i, student in enumerate(student_data):
+        new_class = request.form.get(f'class_{i}', '').strip()
+        new_family = request.form.get(f'family_{i}', '').strip()
+
+        if not new_class or not new_family:
+            continue
+        if new_class not in get_all_classes() or new_family not in get_all_families():
+            continue
+
+        if new_class != student.classification or new_family != student.family:
+            student_data[i] = Student(student.first_name, student.last_name,
+                                     new_class, new_family,
+                                     student.event_list, student.row_number)
+            changed += 1
+
+    if changed > 0:
+        saver(student_data, event_data, tf)
+        flash(f'Updated {changed} member(s) successfully.', 'success')
+    else:
+        flash('No changes detected.', 'info')
+
+    return redirect(url_for('edit_members'))
+
+
+# ---------------------------------------------------------------------------
+# Settings (manage classifications, families, event types)
+# ---------------------------------------------------------------------------
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    cfg = load_config()
+
+    if request.method == 'GET':
+        return render_template('settings.html', config=cfg)
+
+    # POST — update config
+    section = request.form.get('section', '')
+    action = request.form.get('action', '')
+    value = request.form.get('value', '').strip()
+
+    if section not in ('classifications', 'families', 'event_types', 'leaderboard_event_types'):
+        flash('Invalid section.', 'danger')
+        return redirect(url_for('settings'))
+
+    if action == 'add' and value:
+        if value not in cfg[section]:
+            cfg[section].append(value)
+            save_config(cfg)
+            flash(f'Added "{value}" to {section.replace("_", " ")}.', 'success')
+        else:
+            flash(f'"{value}" already exists.', 'warning')
+    elif action == 'remove' and value:
+        if value in cfg[section]:
+            cfg[section].remove(value)
+            save_config(cfg)
+            flash(f'Removed "{value}" from {section.replace("_", " ")}.', 'success')
+        else:
+            flash(f'"{value}" not found.', 'warning')
+
+    return redirect(url_for('settings'))
+
+
+# ---------------------------------------------------------------------------
+# Delete Event (pick which one)
+# ---------------------------------------------------------------------------
+
+@app.route('/delete-event', methods=['POST'])
+def delete_event():
+    tf = get_tracker_file()
+    if not tf:
+        flash('Please select a tracker file first.', 'warning')
+        return redirect(url_for('index'))
+
+    event_data, student_data = load_data(tf)
+    if not event_data:
+        flash('No events to delete.', 'warning')
+        return redirect(url_for('tracker'))
+
+    try:
+        event_index = int(request.form.get('event_index', -1))
+    except (ValueError, TypeError):
+        flash('Invalid event selection.', 'danger')
+        return redirect(url_for('tracker'))
+
+    if event_index < 0 or event_index >= len(event_data):
+        flash('Event not found.', 'danger')
+        return redirect(url_for('tracker'))
+
+    removed = event_data.pop(event_index)
+
+    # Remove the event from every student's event_list
+    for student in student_data:
+        student._Student__event_list = [e for e in student._Student__event_list if e != removed.name]
+
+    saver(student_data, event_data, tf)
+    flash(f'Deleted event "{removed.name}" and saved.', 'success')
+    return redirect(url_for('tracker'))
+
+
+# ---------------------------------------------------------------------------
+# Edit Single Member (click from Data Table)
 # ---------------------------------------------------------------------------
 
 @app.route('/edit-member/<int:row>', methods=['GET', 'POST'])
@@ -384,21 +646,36 @@ def edit_member(row):
 
     student = student_data[row]
 
+    # Build list of events this member has hours for (attendance > 0)
+    member_events = []
+    for i, event in enumerate(event_data):
+        att = event.attendance
+        if row < len(att):
+            try:
+                hrs = float(att[row])
+            except (ValueError, TypeError):
+                hrs = 0.0
+            if hrs > 0:
+                member_events.append({'index': i, 'name': event.name,
+                                      'type': event.classification,
+                                      'date': event.date, 'hours': hrs})
+
     if request.method == 'GET':
         return render_template('edit_member.html',
                                student=student,
                                row=row,
-                               all_classes=ALL_CLASSES,
-                               all_families=ALL_FAMILIES)
+                               all_classes=get_all_classes(),
+                               all_families=get_all_families(),
+                               member_events=member_events)
 
     # POST — update classification and family
     new_class = request.form.get('classification', '').strip()
     new_family = request.form.get('family', '').strip()
 
-    if new_class not in ALL_CLASSES:
+    if new_class not in get_all_classes():
         flash('Invalid classification.', 'danger')
         return redirect(url_for('edit_member', row=row))
-    if new_family not in ALL_FAMILIES:
+    if new_family not in get_all_families():
         flash('Invalid family.', 'danger')
         return redirect(url_for('edit_member', row=row))
 
@@ -407,41 +684,99 @@ def edit_member(row):
     student_data[row] = updated
     saver(student_data, event_data, tf)
     flash(f'Updated {student.first_name} {student.last_name} successfully.', 'success')
-    return redirect(url_for('tracker'))
+    return redirect(url_for('edit_member', row=row))
 
 
 # ---------------------------------------------------------------------------
-# Delete Last Event
+# Edit Member Event Hours
 # ---------------------------------------------------------------------------
 
-@app.route('/delete-last-event', methods=['POST'])
-def delete_last_event():
+@app.route('/edit-member-hours/<int:row>', methods=['POST'])
+def edit_member_hours(row):
     tf = get_tracker_file()
     if not tf:
         flash('Please select a tracker file first.', 'warning')
         return redirect(url_for('index'))
 
     event_data, student_data = load_data(tf)
-    if not event_data:
-        flash('No events to delete.', 'warning')
+
+    if row < 0 or row >= len(student_data):
+        flash('Member not found.', 'danger')
         return redirect(url_for('tracker'))
 
-    removed = event_data[-1]
-    event_data = event_data[:-1]
+    student = student_data[row]
+    changed = 0
 
-    # Remove the last event from every student's event_list and attendance
-    for student in student_data:
-        if removed.name in student.event_list:
-            student.event_list  # access via property
-            student._Student__event_list = [e for e in student._Student__event_list if e != removed.name]
+    for i, event in enumerate(event_data):
+        field_name = f'hours_{i}'
+        new_val = request.form.get(field_name)
+        if new_val is None:
+            continue
 
-    # Trim the last attendance entry from all remaining events
+        new_val = new_val.strip()
+        try:
+            new_hours = float(new_val)
+            if new_hours < 0:
+                new_hours = 0.0
+        except (ValueError, TypeError):
+            continue
+
+        att = list(event.attendance)
+        old_hours = float(att[row]) if row < len(att) else 0.0
+
+        if new_hours != old_hours:
+            att[row] = str(new_hours)
+            event._Event__attendance = att
+
+            # Update student event_list: add if hours > 0 and not listed, remove if 0
+            if new_hours > 0 and event.name not in student._Student__event_list:
+                student._Student__event_list.append(event.name)
+            elif new_hours == 0 and event.name in student._Student__event_list:
+                student._Student__event_list = [e for e in student._Student__event_list if e != event.name]
+
+            changed += 1
+
+    if changed > 0:
+        saver(student_data, event_data, tf)
+        flash(f'Updated hours for {changed} event(s).', 'success')
+    else:
+        flash('No changes detected.', 'info')
+
+    return redirect(url_for('edit_member', row=row))
+
+
+# ---------------------------------------------------------------------------
+# Delete Member
+# ---------------------------------------------------------------------------
+
+@app.route('/delete-member/<int:row>', methods=['POST'])
+def delete_member(row):
+    tf = get_tracker_file()
+    if not tf:
+        flash('Please select a tracker file first.', 'warning')
+        return redirect(url_for('index'))
+
+    event_data, student_data = load_data(tf)
+
+    if row < 0 or row >= len(student_data):
+        flash('Member not found.', 'danger')
+        return redirect(url_for('tracker'))
+
+    removed = student_data.pop(row)
+
+    # Remove this member's attendance entry from all events
     for event in event_data:
-        if len(event.attendance) > len(student_data):
-            event._Event__attendance = event.attendance[:len(student_data)]
+        att = list(event.attendance)
+        if row < len(att):
+            att.pop(row)
+        event._Event__attendance = att
+
+    # Re-number remaining students
+    for i, student in enumerate(student_data):
+        student._Student__row_number = i
 
     saver(student_data, event_data, tf)
-    flash(f'Deleted event "{removed.name}" and saved.', 'success')
+    flash(f'Deleted member {removed.first_name} {removed.last_name}.', 'success')
     return redirect(url_for('tracker'))
 
 

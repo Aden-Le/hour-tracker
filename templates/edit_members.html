@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Edit Members</h2>
+  <a href="/settings" class="btn btn-outline-secondary btn-sm">Manage Options</a>
+</div>
+
+{% if students %}
+<form method="POST" action="/edit-members">
+  <div class="table-responsive table-scroll-wrapper">
+    <table class="table table-sm table-striped table-hover table-bordered align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>#</th>
+          <th>First Name</th>
+          <th>Last Name</th>
+          <th>Classification</th>
+          <th>Family</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in students %}
+        <tr>
+          <td class="text-muted">{{ loop.index }}</td>
+          <td>{{ s.first_name }}</td>
+          <td>{{ s.last_name }}</td>
+          <td>
+            <select name="class_{{ loop.index0 }}" class="form-select form-select-sm">
+              {% for c in all_classes %}
+              <option value="{{ c }}" {% if s.classification == c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td>
+            <select name="family_{{ loop.index0 }}" class="form-select form-select-sm">
+              {% for f in all_families %}
+              <option value="{{ f }}" {% if s.family == f %}selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex gap-2 mt-3">
+    <button type="submit" class="btn btn-success">Save All Changes</button>
+    <a href="/tracker" class="btn btn-outline-secondary">Cancel</a>
+  </div>
+</form>
+{% else %}
+<div class="card border-dashed text-center p-5 text-muted">
+  <p class="mb-0">No members found in the current tracker file.</p>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var table = document.querySelector('table');
+  if (!table) return;
+
+  var headers = table.querySelectorAll('thead th');
+  var sortState = {};
+
+  headers.forEach(function (th, colIdx) {
+    th.style.cursor = 'pointer';
+    th.style.userSelect = 'none';
+    th.title = 'Click to sort';
+    th.innerHTML = th.textContent + ' <span class="sort-arrow" style="opacity:0.4">&#x21C5;</span>';
+
+    th.addEventListener('click', function () {
+      var dir = sortState[colIdx] === 'asc' ? 'desc' : 'asc';
+      sortState = {};
+      sortState[colIdx] = dir;
+
+      // Reset all arrows
+      headers.forEach(function (h) {
+        var arrow = h.querySelector('.sort-arrow');
+        if (arrow) { arrow.innerHTML = '&#x21C5;'; arrow.style.opacity = '0.4'; }
+      });
+      var activeArrow = th.querySelector('.sort-arrow');
+      activeArrow.innerHTML = dir === 'asc' ? '&#x25B2;' : '&#x25BC;';
+      activeArrow.style.opacity = '1';
+
+      var rows = Array.from(table.querySelectorAll('tbody tr'));
+      rows.sort(function (a, b) {
+        // For columns with dropdowns, sort by selected value; otherwise by text
+        var aCell = a.cells[colIdx];
+        var bCell = b.cells[colIdx];
+        var aSelect = aCell.querySelector('select');
+        var bSelect = bCell.querySelector('select');
+        var aVal = aSelect ? aSelect.value : aCell.textContent.trim();
+        var bVal = bSelect ? bSelect.value : bCell.textContent.trim();
+        var aNum = parseFloat(aVal);
+        var bNum = parseFloat(bVal);
+        var cmp;
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          cmp = aNum - bNum;
+        } else {
+          cmp = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+        }
+        return dir === 'asc' ? cmp : -cmp;
+      });
+
+      var tbody = table.querySelector('tbody');
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    });
+  });
+});
+</script>
+
+{% endblock %}

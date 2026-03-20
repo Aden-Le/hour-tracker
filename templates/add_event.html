@@ -28,17 +28,28 @@
               value="{{ event_name or '' }}" required>
           </div>
 
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="specificHoursCheck"
+                name="specific_hours" value="1"
+                {% if specific_hours %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="specificHoursCheck">
+                Specific hours per member
+              </label>
+              <div class="form-text">Check this if each member gets a different number of hours. You'll enter individual hours on the next page.</div>
+            </div>
+          </div>
+
           <div class="row">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" id="durationGroup">
               <label class="form-label fw-semibold">Duration (hours) <span class="text-danger">*</span></label>
-              <input type="number" name="event_duration" class="form-control"
+              <input type="number" name="event_duration" id="eventDuration" class="form-control"
                 placeholder="e.g. 1.5" step="0.5" min="0.5"
-                value="{{ event_duration or '' }}" required>
+                value="{{ event_duration or '' }}">
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
-              <input type="text" name="event_date" class="form-control"
-                placeholder="01/02/2025"
+              <input type="date" name="event_date" class="form-control"
                 value="{{ event_date or '' }}" required>
             </div>
           </div>
@@ -87,5 +98,27 @@
     </form>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var cb = document.getElementById('specificHoursCheck');
+  var durationGroup = document.getElementById('durationGroup');
+  var durationInput = document.getElementById('eventDuration');
+
+  function toggle() {
+    if (cb.checked) {
+      durationGroup.style.display = 'none';
+      durationInput.removeAttribute('required');
+      durationInput.value = '';
+    } else {
+      durationGroup.style.display = '';
+      durationInput.setAttribute('required', '');
+    }
+  }
+
+  cb.addEventListener('change', toggle);
+  toggle();
+});
+</script>
 
 {% endblock %}
