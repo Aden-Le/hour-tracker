@@ -6,10 +6,10 @@
   font-size: 0.875rem;
 }
 
-/* Scrollable table wrapper */
+/* Scrollable table wrapper — horizontal scroll only, no vertical condensing */
 .table-responsive {
-  max-height: 75vh;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 /* Sticky header in scrollable tables */
@@ -17,6 +17,18 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  white-space: nowrap;
+}
+
+/* Prevent table cells from collapsing — let the table be wide and scroll */
+.table-responsive table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.table-responsive table td,
+.table-responsive table th {
+  white-space: nowrap;
 }
 
 /* Dashed border card (placeholder state) */

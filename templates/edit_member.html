@@ -1,11 +1,84 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="row justify-content-center">
-  <div class="col-lg-6">
-    <h2 class="mb-4">✏️ Edit Member</h2>
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Edit Member — {{ student.first_name }} {{ student.last_name }}</h2>
+  <a href="/tracker" class="btn btn-outline-secondary btn-sm">Back to Data Table</a>
+</div>
 
-    <div class="card mb-4 border-secondary">
+<div class="row g-4">
+
+  <!-- Classification & Family -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white fw-bold">Classification & Family</div>
+      <div class="card-body">
+        <form method="POST" action="/edit-member/{{ row }}">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Classification</label>
+            <select name="classification" class="form-select" required>
+              {% for c in all_classes %}
+              <option value="{{ c }}" {% if student.classification == c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Family</label>
+            <select name="family" class="form-select" required>
+              {% for f in all_families %}
+              <option value="{{ f }}" {% if student.family == f %}selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-success">Save Changes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Event Hours -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white fw-bold">Edit Event Hours</div>
+      <div class="card-body">
+        {% if member_events %}
+        <p class="text-muted small">Adjust hours for events this member has attended. Set to 0 to remove them from the event.</p>
+        <form method="POST" action="/edit-member-hours/{{ row }}">
+          <table class="table table-sm table-bordered align-middle mb-3">
+            <thead class="table-light">
+              <tr>
+                <th>Event</th>
+                <th>Type</th>
+                <th>Date</th>
+                <th style="width:100px">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ev in member_events %}
+              <tr>
+                <td>{{ ev.name }}</td>
+                <td><span class="badge bg-secondary">{{ ev.type }}</span></td>
+                <td>{{ ev.date }}</td>
+                <td>
+                  <input type="number" name="hours_{{ ev.index }}" class="form-control form-control-sm"
+                         value="{{ ev.hours }}" step="0.25" min="0">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <button type="submit" class="btn btn-primary">Save Hours</button>
+        </form>
+        {% else %}
+        <p class="text-muted mb-0">This member has not attended any events yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Member Info -->
+  <div class="col-lg-6">
+    <div class="card">
       <div class="card-header bg-secondary text-white fw-bold">Current Info</div>
       <div class="card-body">
         <dl class="row mb-0">
@@ -20,43 +93,42 @@
         </dl>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <div class="card-header bg-dark text-white fw-bold">Update Classification & Family</div>
+  <!-- Delete Member -->
+  <div class="col-lg-6">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white fw-bold">Danger Zone</div>
       <div class="card-body">
-        <form method="POST" action="/edit-member/{{ row }}">
+        <p>Permanently remove <strong>{{ student.first_name }} {{ student.last_name }}</strong> from the tracker.</p>
+        <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteMemberModal">
+          Delete Member
+        </button>
+      </div>
+    </div>
+  </div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Classification</label>
-            <select name="classification" class="form-select" required>
-              {% for c in all_classes %}
-              <option value="{{ c }}" {% if student.classification == c %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-          </div>
+</div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Family</label>
-            <select name="family" class="form-select" required>
-              {% for f in all_families %}
-              <option value="{{ f }}" {% if student.family == f %}selected{% endif %}>{{ f }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-success">Save Changes</button>
-            <a href="/tracker" class="btn btn-outline-secondary">Cancel</a>
-          </div>
-
+<!-- Delete Member Confirmation Modal -->
+<div class="modal fade" id="deleteMemberModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Delete {{ student.first_name }} {{ student.last_name }}?</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>This will permanently remove this member and all their attendance data.</p>
+        <p class="text-danger mb-0">This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="POST" action="/delete-member/{{ row }}">
+          <button type="submit" class="btn btn-danger">Delete Member</button>
         </form>
       </div>
     </div>
-
-    <p class="text-muted small mt-3">
-      Row index: {{ row }} — To edit a different member, navigate to
-      <code>/edit-member/&lt;row&gt;</code> directly.
-    </p>
   </div>
 </div>
 
