@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h2 class="mb-4">✅ Confirm Event Addition</h2>
+
+    <!-- Event Summary Card -->
+    <div class="card mb-4 border-primary">
+      <div class="card-header bg-primary text-white fw-bold">Event Summary</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Event Name</dt>
+          <dd class="col-sm-8">{{ pending.name }}</dd>
+          <dt class="col-sm-4">Type</dt>
+          <dd class="col-sm-8">{{ pending.type }}</dd>
+          <dt class="col-sm-4">Date</dt>
+          <dd class="col-sm-8">{{ pending.date }}</dd>
+          <dt class="col-sm-4">Duration</dt>
+          <dd class="col-sm-8">{{ pending.duration }} hour(s)</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+
+      <!-- Existing Members -->
+      <div class="col-md-6">
+        <div class="card h-100 border-success">
+          <div class="card-header bg-success text-white">
+            ✔ Existing Members ({{ matched | length }})
+          </div>
+          <div class="card-body">
+            {% if matched %}
+              <p class="text-muted small mb-2">These people are already in the tracker and will have this event recorded for them.</p>
+              <ul class="list-unstyled mb-0">
+                {% for name in matched %}
+                <li><span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-1">✔</span> {{ name }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted small mb-0">No matches found in existing tracker.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- New Members -->
+      <div class="col-md-6">
+        <div class="card h-100 border-warning">
+          <div class="card-header bg-warning text-dark">
+            ➕ New Members to Add ({{ new_people | length }})
+          </div>
+          <div class="card-body">
+            {% if new_people %}
+              <p class="text-muted small mb-2">These people are not in the tracker yet. They will be added as <strong>Member / NoFam</strong>. You can edit their details later.</p>
+              <ul class="list-unstyled mb-0">
+                {% for name in new_people %}
+                <li><span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle me-1">+</span> {{ name }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted small mb-0">No new members — everyone is already in the tracker.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    {% if not matched and not new_people %}
+    <div class="alert alert-warning">
+      ⚠️ No names were found to process. Go back and check your pasted names.
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="d-flex gap-2">
+      <form method="POST" action="/add-event/confirm">
+        <button type="submit" class="btn btn-success btn-lg"
+          {% if not matched and not new_people %}disabled{% endif %}>
+          💾 Confirm & Save
+        </button>
+      </form>
+      <a href="/add-event" class="btn btn-outline-secondary btn-lg">← Go Back</a>
+      <a href="/tracker" class="btn btn-outline-danger btn-lg">Cancel</a>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

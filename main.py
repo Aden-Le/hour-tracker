@@ -80,7 +80,7 @@ def import_names(input_file):
 def process_main_tracker(input_file):
     #---------------------------------------------------------------
     # Load the CSV
-    data_frame = pd.read_csv(input_file)
+    data_frame = pd.read_csv(input_file, dtype=str).fillna('')
     #Uncomment to view data frame
     #print(data_frame)
     #---------------------------------------------------------------
@@ -179,6 +179,13 @@ def add_names(student_data, event_data, new_first, new_last):
     #---------------------------------------------------------------
     elif confirm.lower() == "y":
         # Ensure new_first and new_last have the same length
+        pairs_input = list(zip(new_first, new_last))
+        if len(pairs_input) != len(set(pairs_input)):
+            print("\n" + "="*60)
+            print("ERROR: Duplicate names detected in the attendee list!")
+            print("Check names.csv for duplicate entries and try again.")
+            print("="*60 + "\n")
+            return
         if len(new_first) != len(new_last):
             print("Error: First and last name lists must be of the same length.")
             return
@@ -196,14 +203,12 @@ def add_names(student_data, event_data, new_first, new_last):
                 matched_students.add(student_name)
 
         # Remove matched students from new_first and new_last
-        for first, last in matched_students:
-            try:
-                index = new_first.index(first)
-                if new_last[index] == last:
-                    del new_first[index]
-                    del new_last[index]
-            except ValueError:
-                continue  # Skip if the name is already removed
+        pairs = list(zip(new_first, new_last))
+        for match in matched_students:
+            if match in pairs:
+                pairs.remove(match)
+        new_first = [p[0] for p in pairs]
+        new_last  = [p[1] for p in pairs]
         #---------------------------------------------------------------
         # Confirm Addition of New names & Event
 
@@ -259,6 +264,57 @@ def add_names(student_data, event_data, new_first, new_last):
             print("Returning to the main menu")
             main()
         #---------------------------------------------------------------
+
+def apply_event(student_data, event_data, event_name, event_type, event_date, event_time, new_first, new_last):
+    """
+    Pure (no input() calls) version of the add-event logic for use by the web UI.
+    Matches existing students, adds new ones, appends the event, and returns updated lists.
+    Returns (student_data, event_data) or raises ValueError on duplicate names.
+    """
+    pairs_input = list(zip(new_first, new_last))
+    if len(pairs_input) != len(set(pairs_input)):
+        raise ValueError("Duplicate names detected in attendee list.")
+
+    new_students_set = set(zip(new_first, new_last))
+    matched_students = set()
+    for student in student_data:
+        student_name = (student.first_name, student.last_name)
+        if student_name in new_students_set:
+            student.event_list = event_name
+            matched_students.add(student_name)
+
+    pairs = list(zip(new_first, new_last))
+    for match in matched_students:
+        if match in pairs:
+            pairs.remove(match)
+    new_first = [p[0] for p in pairs]
+    new_last  = [p[1] for p in pairs]
+
+    # Extend attendance for existing events with zeros for new members
+    original_name = event_name
+    blanks = [0] * len(new_first)
+    unique = 0
+    for event in event_data:
+        event.attendance.extend(blanks)
+        if event.name == event_name:
+            unique += 1
+            event_name = original_name + "." + str(unique)
+
+    number = len(student_data) - 1
+    for index in range(len(new_first)):
+        number += 1
+        student_data.append(Student(new_first[index], new_last[index], "Member", "NoFam", [event_name], number))
+
+    event_attendance = []
+    for student in student_data:
+        if event_name in student.event_list:
+            event_attendance.append(event_time)
+        else:
+            event_attendance.append("0")
+
+    event_data.append(Event(event_name, event_type, event_date, event_attendance))
+    return student_data, event_data
+
 
 def classification_getter():
     #---------------------------------------------------------------
@@ -713,4 +769,5 @@ def main():
         print("Have a good day!")
 
 
-main()
+if __name__ == '__main__':
+    main()
