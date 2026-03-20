@@ -1,0 +1,37 @@
+/* Hour Tracker — Custom Styles */
+
+/* Slightly tighter table for wide event columns */
+.table-sm td, .table-sm th {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Scrollable table wrapper */
+.table-responsive {
+  max-height: 75vh;
+  overflow: auto;
+}
+
+/* Sticky header in scrollable tables */
+.table-responsive table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Dashed border card (placeholder state) */
+.border-dashed {
+  border: 2px dashed #dee2e6 !important;
+}
+
+/* Monospace textarea for pasted names */
+textarea.font-monospace {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Navbar brand spacing */
+.navbar-brand {
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}

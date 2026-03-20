@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row">
+  <div class="col-12">
+    <h2 class="mb-4">Tracker File Manager</h2>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Existing Files -->
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white fw-bold">Select Existing Tracker</div>
+      <div class="card-body">
+        {% if csv_files %}
+          {% for f in csv_files %}
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <form method="POST" action="/select-file" class="me-2 flex-grow-1">
+              <input type="hidden" name="filename" value="{{ f }}">
+              <button type="submit"
+                class="btn btn-sm w-100 {% if active == f %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                {% if active == f %}✔ {% endif %}{{ f }}
+              </button>
+            </form>
+            <!-- Rename -->
+            <button class="btn btn-sm btn-outline-warning me-1"
+              data-bs-toggle="modal" data-bs-target="#renameModal"
+              data-oldname="{{ f }}">✏️</button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted">No tracker CSV files found. Create one below.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Create New File -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white fw-bold">Create New Tracker</div>
+      <div class="card-body">
+        <form method="POST" action="/new-file">
+          <div class="mb-3">
+            <label class="form-label">File Name</label>
+            <div class="input-group">
+              <input type="text" name="filename" class="form-control"
+                placeholder="e.g. 2025_2026_Tracker" required>
+              <span class="input-group-text">.csv</span>
+            </div>
+            <div class="form-text">A blank tracker will be created from the template.</div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Create Tracker</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Info -->
+  <div class="col-lg-3">
+    <div class="card h-100 border-info">
+      <div class="card-header bg-info text-white fw-bold">Quick Start</div>
+      <div class="card-body small">
+        <ol class="ps-3 mb-0">
+          <li class="mb-1">Select or create a tracker file</li>
+          <li class="mb-1">Click <strong>Add Event</strong> to record attendance</li>
+          <li class="mb-1">Paste names from Excel (two columns: First, Last)</li>
+          <li class="mb-1">Use <strong>Hour Counter</strong> to filter and export hours</li>
+          <li>Check <strong>Leaderboard</strong> for family totals</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Rename Modal -->
+<div class="modal fade" id="renameModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="/rename-file">
+        <div class="modal-header">
+          <h5 class="modal-title">Rename File</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="old_name" id="renameOldName">
+          <label class="form-label">New name for <strong id="renameOldDisplay"></strong></label>
+          <div class="input-group">
+            <input type="text" name="new_name" class="form-control" required
+              placeholder="new_name">
+            <span class="input-group-text">.csv</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Rename</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const renameModal = document.getElementById('renameModal');
+  renameModal.addEventListener('show.bs.modal', function (event) {
+    const btn = event.relatedTarget;
+    const oldName = btn.getAttribute('data-oldname');
+    document.getElementById('renameOldName').value = oldName;
+    document.getElementById('renameOldDisplay').textContent = oldName;
+  });
+</script>
+
+{% endblock %}
