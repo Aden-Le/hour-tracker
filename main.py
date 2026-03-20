@@ -80,7 +80,7 @@ def import_names(input_file):
 def process_main_tracker(input_file):
     #---------------------------------------------------------------
     # Load the CSV
-    data_frame = pd.read_csv(input_file)
+    data_frame = pd.read_csv(input_file, dtype=str).fillna('')
     #Uncomment to view data frame
     #print(data_frame)
     #---------------------------------------------------------------

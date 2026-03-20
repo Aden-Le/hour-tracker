@@ -14,7 +14,7 @@ from main import process_main_tracker, apply_event, hour_counter, saver, Student
 app = Flask(__name__)
 app.secret_key = 'tzu-chi-hour-tracker-secret'
 
-TEMPLATE_FILE = 'template.csv'
+TEMPLATE_FILE = 'blank_template.csv'
 ALL_CLASSES = ["Officer", "Junior Officer", "Big Sib", "Member"]
 ALL_FAMILIES = ["Kuromi", "PomPom", "Melody", "NoFam"]
 ALL_EVENT_TYPES = ["General Meeting", "Officer Meeting", "Tabling", "Volunteer", "Social", "Retreat"]
@@ -37,16 +37,24 @@ def load_data(tracker_file):
 
 def list_csv_files():
     """Return all *.csv files in the working directory (excluding template/blank/example)."""
-    skip = {'template.csv', 'blank.csv', 'example.csv', 'names.csv'}
+    skip = {'template.csv', 'blank_template.csv', 'blank.csv', 'example.csv', 'names.csv'}
     files = [os.path.basename(f) for f in glob('*.csv')]
     return [f for f in sorted(files) if f not in skip]
 
 
 def parse_pasted_names(text):
-    """Parse Excel copy-paste (tab-separated First\tLast per line) into two lists."""
+    """Parse pasted names (tab-separated or space-separated) into two lists.
+    Handles Excel copy-paste (First\tLast), trailing spaces, and space-only separators."""
     first_names, last_names = [], []
     for line in text.strip().splitlines():
-        parts = line.strip().split('\t')
+        line = line.strip()
+        if not line:
+            continue
+        # Try tab-separated first (standard Excel copy), fall back to any whitespace
+        if '\t' in line:
+            parts = [p.strip() for p in line.split('\t')]
+        else:
+            parts = line.split(None, 1)  # split on any whitespace, max 2 parts
         if len(parts) >= 2:
             f = parts[0].strip().capitalize()
             l = parts[1].strip().capitalize()
@@ -102,19 +110,8 @@ def new_file():
     if os.path.isfile(name):
         flash(f'"{name}" already exists. Choose a different name.', 'danger')
         return redirect(url_for('index'))
-    # Copy structure from template.csv if it exists, else write a blank header
-    if os.path.isfile(TEMPLATE_FILE):
-        import shutil
-        shutil.copy(TEMPLATE_FILE, name)
-    else:
-        # Write a minimal valid header (matches the expected CSV format)
-        header_df = pd.DataFrame(columns=[
-            'First Name', 'Last Name', 'Class', 'Family',
-            'Total Hours', 'Volunteer Hours', 'General Meeting', 'Tabling', 'Social', 'Banquet'
-        ])
-        # Two blank metadata rows followed by empty student rows
-        meta = pd.DataFrame([[''] * 10, [''] * 10], columns=header_df.columns)
-        meta.to_csv(name, index=False)
+    import shutil
+    shutil.copy(TEMPLATE_FILE, name)
     session['tracker_file'] = name
     flash(f'Created new tracker: {name}', 'success')
     return redirect(url_for('tracker'))
