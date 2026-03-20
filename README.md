@@ -17,7 +17,7 @@ A web application for tracking event attendance and volunteer hours for Tzu Chi 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/hour-tracker.git
+git clone https://github.com/Aden-Le/hour-tracker.git
 cd hour-tracker
 ```
 
